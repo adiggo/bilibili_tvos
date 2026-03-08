@@ -5,6 +5,8 @@ import UIKit
 
 struct PlayerView: View {
     enum VideoQuality: Int, CaseIterable, Identifiable {
+        case p360 = 16
+        case p480 = 32
         case p720 = 64
         case p1080 = 80
         
@@ -12,6 +14,8 @@ struct PlayerView: View {
         
         var label: String {
             switch self {
+            case .p360: return "360p"
+            case .p480: return "480p"
             case .p720: return "720p"
             case .p1080: return "1080p"
             }
@@ -20,6 +24,9 @@ struct PlayerView: View {
     
     let aid: Int
     let cid: Int
+    let epId: Int?
+    let title: String
+    let author: String
     @Binding var isPresented: Bool
     
     @State private var player: AVPlayer?
@@ -32,6 +39,15 @@ struct PlayerView: View {
     @State private var danmakuRowIndex = 0
     @State private var activeDanmaku: [ActiveDanmaku] = []
     @State private var timeObserverToken: Any?
+    
+    init(aid: Int, cid: Int, epId: Int? = nil, title: String, author: String, isPresented: Binding<Bool>) {
+        self.aid = aid
+        self.cid = cid
+        self.epId = epId
+        self.title = title
+        self.author = author
+        self._isPresented = isPresented
+    }
     
     var body: some View {
         ZStack {
@@ -55,16 +71,22 @@ struct PlayerView: View {
                     width: geo.size.width,
                     height: geo.size.height
                 )
-                .allowsHitTesting(false)
             }
+            .edgesIgnoringSafeArea(.all)
+            .allowsHitTesting(false)
             
             if isLoading && errorMessage == nil {
                 VStack(spacing: 20) {
                     ProgressView()
                         .progressViewStyle(CircularProgressViewStyle(tint: .white))
                         .scaleEffect(2)
-                    Text("Connecting to Bilibili...")
+                    Text(epId != nil ? "Connecting to PGC Stream..." : "Connecting to Bilibili...")
                         .foregroundColor(.white)
+                    Text(title)
+                        .font(.caption)
+                        .foregroundColor(.gray)
+                        .padding(.horizontal, 100)
+                        .lineLimit(1)
                 }
             }
             
@@ -118,12 +140,16 @@ struct PlayerView: View {
         player?.pause()
         removeTimeObserver()
         resetDanmaku()
-        // Don't nil out the player yet to avoid layout flicker if possible, 
-        // but for a clean state we might need to.
         
         do {
-            print("📡 [PLAYER] Fetching URL for aid: \(aid), cid: \(cid), qn: \(selectedQuality.rawValue)")
-            let playUrlResponse = try await BilibiliApiService.shared.fetchPlayUrl(aid: aid, cid: cid, qn: selectedQuality.rawValue)
+            let playUrlResponse: PlayUrlResponse
+            if let epId = epId {
+                print("📡 [PLAYER] Fetching PGC URL for epId: \(epId), cid: \(cid), qn: \(selectedQuality.rawValue)")
+                playUrlResponse = try await BilibiliApiService.shared.fetchPgcPlayUrl(epId: epId, cid: cid, qn: selectedQuality.rawValue)
+            } else {
+                print("📡 [PLAYER] Fetching UGC URL for aid: \(aid), cid: \(cid), qn: \(selectedQuality.rawValue)")
+                playUrlResponse = try await BilibiliApiService.shared.fetchPlayUrl(aid: aid, cid: cid, qn: selectedQuality.rawValue)
+            }
             
             guard let videoUrlString = playUrlResponse.durl?.first?.url else {
                 throw NSError(domain: "Player", code: -1, userInfo: [NSLocalizedDescriptionKey: "No stream URL found"])
@@ -149,6 +175,20 @@ struct PlayerView: View {
             
             let asset = AVURLAsset(url: videoUrl, options: ["AVURLAssetHTTPHeaderFieldsKey": headers])
             let playerItem = AVPlayerItem(asset: asset)
+            
+            // Add Metadata for Now Playing info
+            let titleItem = AVMutableMetadataItem()
+            titleItem.identifier = .commonIdentifierTitle
+            titleItem.value = title as NSString
+            titleItem.extendedLanguageTag = "und"
+            
+            let artistItem = AVMutableMetadataItem()
+            artistItem.identifier = .commonIdentifierArtist
+            artistItem.value = author as NSString
+            artistItem.extendedLanguageTag = "und"
+            
+            playerItem.externalMetadata = [titleItem, artistItem]
+            
             let newPlayer = AVPlayer(playerItem: playerItem)
             
             if let time = currentTime {

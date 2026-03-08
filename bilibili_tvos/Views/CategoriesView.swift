@@ -77,6 +77,7 @@ struct CategoryDetailView: View {
                         .buttonStyle(.card)
                     }
                 }
+                .drawingGroup()
                 .padding(40)
             }
         }

@@ -4,6 +4,9 @@ struct BilibiliApiResponse<T: Codable>: Codable {
     let code: Int?
     let message: String?
     let data: T?
+    let result: T?
+    
+    var anyData: T? { data ?? result }
 }
 
 struct VideoListResponse: Codable {
@@ -117,11 +120,19 @@ struct VideoItem: Codable, Identifiable, Hashable {
     var displayFace: String { (face ?? owner?.face ?? "").httpsUrl }
     
     var videoAid: Int? {
-        // Only return if it looks like a real AID (usually > 100,000)
+        // UGC Videos (Standard)
         if let aidValue = aidValue, aidValue > 100 { return aidValue }
+        if let avidValue = avid, avidValue > 100 { return avidValue }
         if let playerAid = playerArgs?.aid, playerAid > 100 { return playerAid }
-        if let searchIdValue = searchId?.intValue, searchIdValue > 100 { return searchIdValue }
-        if let p = param, let i = Int(p), i > 100 { return i }
+        if let searchIdValue = searchId?.intValue, searchIdValue > 100 && (goto == "av" || goto == nil) { return searchIdValue }
+        
+        // Try parsing from URI or arcurl for standard videos
+        for source in [uri, arcurl].compactMap({ $0 }) {
+            if let range = source.range(of: "(av|/av)(\\d+)", options: .regularExpression) {
+                let avNumberStr = source[range].replacingOccurrences(of: "/av", with: "").replacingOccurrences(of: "av", with: "")
+                if let i = Int(avNumberStr) { return i }
+            }
+        }
         return nil
     }
     
@@ -129,12 +140,38 @@ struct VideoItem: Codable, Identifiable, Hashable {
         if let bvidValue = bvidValue, !bvidValue.isEmpty { return bvidValue }
         if let p = param, p.hasPrefix("BV") { return p }
         if let searchIdValue = searchId?.stringValue, searchIdValue.hasPrefix("BV") { return searchIdValue }
-        if let uri = uri {
-            if let range = uri.range(of: "BV") {
-                return String(uri[range.lowerBound...]).split(separator: "/").first.map(String.init)
+        
+        // Try parsing from URI or arcurl
+        for source in [uri, arcurl].compactMap({ $0 }) {
+            if let range = source.range(of: "BV[a-zA-Z0-9]+", options: .regularExpression) {
+                return String(source[range])
             }
         }
         return nil
+    }
+    
+    // Bangumi / Media specific IDs
+    var episodeId: Int? { 
+        if let eid = ep_id, eid > 0 { return eid }
+        if let p = param, p.hasPrefix("ep"), let i = Int(p.replacingOccurrences(of: "ep", with: "")) { return i }
+        if let uri = uri, let range = uri.range(of: "ep(\\d+)", options: .regularExpression) {
+            return Int(uri[range].replacingOccurrences(of: "ep", with: ""))
+        }
+        return nil
+    }
+    
+    var seasonId: Int? { 
+        if let sid = season_id, sid > 0 { return sid }
+        if let p = param, p.hasPrefix("ss"), let i = Int(p.replacingOccurrences(of: "ss", with: "")) { return i }
+        if let uri = uri, let range = uri.range(of: "ss(\\d+)", options: .regularExpression) {
+            return Int(uri[range].replacingOccurrences(of: "ss", with: ""))
+        }
+        return nil
+    }
+    
+    var isBangumi: Bool {
+        return goto == "bangumi" || goto == "pgc" || ep_id != nil || season_id != nil || 
+               (uri?.contains("bangumi") ?? false) || (uri?.contains("/ss") ?? false) || (uri?.contains("/ep") ?? false)
     }
 
     let play: Int?
@@ -142,6 +179,11 @@ struct VideoItem: Codable, Identifiable, Hashable {
     let author: String?
     let face: String?
     let idx: Int?
+    let arcurl: String?
+    let avid: Int?
+    private let ep_id: Int?
+    private let season_id: Int?
+    let media_id: Int?
     
     // Multi-type support for search results
     private let aid: DynamicValue?
@@ -152,7 +194,7 @@ struct VideoItem: Codable, Identifiable, Hashable {
     var bvidValue: String? { bvid?.stringValue }
 
     enum CodingKeys: String, CodingKey {
-        case title, name, cover, pic, uri, param, goto, desc, play, aid, bvid, owner, face, args, idx, author
+        case title, name, cover, pic, uri, param, goto, desc, play, aid, bvid, owner, face, args, idx, author, arcurl, avid, ep_id, season_id, media_id
         case searchId = "id"
         case playerArgs = "player_args"
     }
@@ -241,6 +283,27 @@ struct VideoStat: Codable, Hashable {
 struct VideoPage: Codable, Hashable {
     let cid: Int?
     let part: String?
+}
+
+struct BangumiDetailResponse: Codable {
+    let title: String?
+    let evaluate: String?
+    let cover: String?
+    let episodes: [BangumiEpisode]?
+}
+
+struct BangumiEpisode: Codable {
+    let id: Int? // This is the ep_id
+    let aid: Int?
+    let cid: Int?
+    let bvid: String?
+    let title: String?
+    let longTitle: String?
+    
+    enum CodingKeys: String, CodingKey {
+        case id, aid, cid, bvid, title
+        case longTitle = "long_title"
+    }
 }
 
 extension String {

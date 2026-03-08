@@ -42,6 +42,7 @@ struct SearchView: View {
                             .buttonStyle(.card)
                         }
                     }
+                    .drawingGroup()
                     .padding(40)
                 }
             }

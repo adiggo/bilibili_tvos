@@ -29,22 +29,7 @@ struct HomeView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 40) {
-                // Debug Dashboard
-                HStack {
-                    Text("Total Videos: \(videos.count)")
-                        .font(.caption)
-                        .padding()
-                        .background(Color.blue.opacity(0.3))
-                        .cornerRadius(10)
-                    
-                    Button("FETCH 1ST VIDEO LINK") {
-                        fetchDebugLink()
-                    }
-                    .buttonStyle(.borderedProminent)
-                }
-                .padding(.horizontal, 60)
-                
-                HStack {
+                HStack(spacing: 40) {
                     Picker("Feed", selection: $feedMode) {
                         ForEach(FeedMode.allCases) { mode in
                             Text(mode.rawValue).tag(mode)
@@ -55,32 +40,40 @@ struct HomeView: View {
                     
                     if feedMode == .personalized && !isLoggedIn {
                         Text("Login required for personalized feed")
-                            .font(.caption)
+                            .font(.headline)
                             .foregroundColor(.secondary)
+                    }
+                    
+                    Spacer()
+                    
+                    if isFetchingMore {
+                        ProgressView()
+                            .scaleEffect(1.5)
                     }
                 }
                 .padding(.horizontal, 60)
-                
-                if !debugVideoLink.isEmpty {
-                    Text("🔗 Link: \(debugVideoLink)")
-                        .font(.caption)
-                        .padding(.horizontal, 60)
-                        .foregroundColor(.green)
-                }
+                .padding(.top, 40)
                 
                 if isLoading && videos.isEmpty {
-                    HStack {
-                        Spacer()
-                        ProgressView("Fetching Home Feed...")
-                        Spacer()
-                    }
-                    .frame(height: 500)
-                } else if let error = errorMessage, videos.isEmpty {
                     VStack {
-                        Text("Error: \(error)")
-                        Button("Retry Load") { loadData() }
+                        Spacer()
+                        ProgressView("Fetching Content...")
+                            .scaleEffect(2)
+                        Spacer()
                     }
-                    .frame(maxWidth: .infinity)
+                    .frame(maxWidth: .infinity, minHeight: 600)
+                } else if let error = errorMessage, videos.isEmpty {
+                    VStack(spacing: 30) {
+                        Spacer()
+                        Image(systemName: "exclamationmark.triangle")
+                            .font(.system(size: 100))
+                        Text(error)
+                            .font(.title2)
+                        Button("Retry") { loadData() }
+                            .buttonStyle(.card)
+                        Spacer()
+                    }
+                    .frame(maxWidth: .infinity, minHeight: 600)
                 } else {
                     LazyVGrid(columns: columns, spacing: 80) {
                         ForEach(videos) { video in
@@ -88,14 +81,6 @@ struct HomeView: View {
                                 selectedVideo = video
                             } label: {
                                 VideoCard(video: video)
-                                    .overlay(
-                                        Text("AID: \(video.videoAid ?? 0)")
-                                            .font(.system(size: 14))
-                                            .foregroundColor(.white)
-                                            .background(Color.black.opacity(0.5))
-                                            .padding(8),
-                                        alignment: .topTrailing
-                                    )
                             }
                             .buttonStyle(.card)
                             .onAppear {
@@ -105,31 +90,43 @@ struct HomeView: View {
                             }
                         }
                         
-                        if !videos.isEmpty {
-                            Button("Load More Items") {
+                        if !videos.isEmpty && !isFetchingMore {
+                            Button {
                                 loadMore()
+                            } label: {
+                                VStack {
+                                    Image(systemName: "arrow.clockwise.circle")
+                                        .font(.system(size: 60))
+                                    Text("Load More")
+                                }
+                                .frame(width: 400, height: 225)
                             }
                             .buttonStyle(.card)
-                            .frame(height: 225)
                         }
                     }
-                    .padding(60)
+                    .drawingGroup()
+                    .padding(.horizontal, 60)
+                    .padding(.bottom, 60)
                 }
             }
         }
         .onAppear {
             isLoggedIn = BilibiliApiService.shared.isLoggedIn
-            if videos.isEmpty { loadData() }
+            if videos.isEmpty {
+                loadData()
+            }
         }
-        .navigationTitle("Trending")
+        .navigationTitle(feedMode.rawValue)
         .navigationDestination(item: $selectedVideo) { video in
             VideoDetailView(video: video)
         }
         .onChange(of: feedMode) { _, _ in
+            videos = [] // Clear old results instantly for better feedback
             loadData()
         }
         .onReceive(NotificationCenter.default.publisher(for: BilibiliApiService.authDidChangeNotification)) { _ in
             isLoggedIn = BilibiliApiService.shared.isLoggedIn
+            videos = []
             loadData()
         }
     }
@@ -138,6 +135,9 @@ struct HomeView: View {
         isLoading = true
         errorMessage = nil
         Task {
+            if AppDebug.isEnabled {
+                print("🟢 Home load started: \(Date().timeIntervalSince1970)")
+            }
             do {
                 if feedMode == .personalized {
                     guard BilibiliApiService.shared.isLoggedIn else {
@@ -151,9 +151,15 @@ struct HomeView: View {
                     videos = try await BilibiliApiService.shared.fetchTrending()
                 }
                 isLoading = false
+                if AppDebug.isEnabled {
+                    print("🟢 Home load finished: \(Date().timeIntervalSince1970)")
+                }
             } catch {
                 errorMessage = error.localizedDescription
                 isLoading = false
+                if AppDebug.isEnabled {
+                    print("🟢 Home load failed: \(Date().timeIntervalSince1970)")
+                }
             }
         }
     }

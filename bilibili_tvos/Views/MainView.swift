@@ -52,5 +52,10 @@ struct MainView: View {
             }
             .tag(Tab.settings)
         }
+        .onAppear {
+            if AppDebug.isEnabled {
+                print("🟢 MainView appeared: \(Date().timeIntervalSince1970)")
+            }
+        }
     }
 }

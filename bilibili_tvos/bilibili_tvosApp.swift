@@ -9,6 +9,12 @@ import SwiftUI
 
 @main
 struct bilibili_tvosApp: App {
+    init() {
+        if AppDebug.isEnabled {
+            print("🟢 App Init: \(Date().timeIntervalSince1970)")
+        }
+    }
+    
     var body: some Scene {
         WindowGroup {
             MainView()

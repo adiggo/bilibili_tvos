@@ -91,7 +91,7 @@ class BilibiliApiService {
                 throw NSError(domain: "BilibiliApi", code: code, userInfo: [NSLocalizedDescriptionKey: response.message ?? "Unknown error"])
             }
             
-            guard let responseData = response.data else {
+            guard let responseData = response.anyData else {
                 throw NSError(domain: "BilibiliApi", code: -1, userInfo: [NSLocalizedDescriptionKey: "No data in response"])
             }
             
@@ -138,7 +138,7 @@ class BilibiliApiService {
                 throw NSError(domain: "BilibiliApi", code: code, userInfo: [NSLocalizedDescriptionKey: apiResponse.message ?? "Unknown error"])
             }
             
-            guard let responseData = apiResponse.data else {
+            guard let responseData = apiResponse.anyData else {
                 throw NSError(domain: "BilibiliApi", code: -1, userInfo: [NSLocalizedDescriptionKey: "No data in response"])
             }
             
@@ -177,7 +177,7 @@ class BilibiliApiService {
         if let code = apiResponse.code, code != 0 {
             throw NSError(domain: "BilibiliApi", code: code, userInfo: [NSLocalizedDescriptionKey: apiResponse.message ?? "Unknown error"])
         }
-        guard let responseData = apiResponse.data else {
+        guard let responseData = apiResponse.anyData else {
             throw NSError(domain: "BilibiliApi", code: -1, userInfo: [NSLocalizedDescriptionKey: "No data in response"])
         }
         return responseData
@@ -243,6 +243,17 @@ class BilibiliApiService {
         // Web interface view is highly compatible
         return try await requestWeb(endpoint: "/x/web-interface/view", parameters: parameters)
     }
+
+    func fetchBangumiDetail(seasonId: Int? = nil, epId: Int? = nil) async throws -> BangumiDetailResponse {
+        var parameters: [String: String] = [:]
+        if let sid = seasonId {
+            parameters["season_id"] = String(sid)
+        } else if let eid = epId {
+            parameters["ep_id"] = String(eid)
+        }
+        
+        return try await requestWeb(endpoint: "/pgc/view/web/season", parameters: parameters)
+    }
     
     func fetchPlayUrl(aid: Int, cid: Int, qn: Int = 32) async throws -> PlayUrlResponse {
         let parameters: [String: String] = [
@@ -254,6 +265,17 @@ class BilibiliApiService {
         
         // General player playurl is more stable across different video types
         return try await requestWeb(endpoint: "/x/player/playurl", parameters: parameters)
+    }
+
+    func fetchPgcPlayUrl(epId: Int, cid: Int, qn: Int = 32) async throws -> PlayUrlResponse {
+        let parameters: [String: String] = [
+            "ep_id": String(epId),
+            "cid": String(cid),
+            "qn": String(qn),
+            "otype": "json"
+        ]
+        
+        return try await requestWeb(endpoint: "/pgc/player/web/playurl", parameters: parameters)
     }
 
     func fetchDanmaku(cid: Int) async throws -> [DanmakuItem] {
@@ -286,8 +308,15 @@ class BilibiliApiService {
         ]
         
         let response: SearchResponse = try await requestWeb(endpoint: "/x/web-interface/search/all/v2", parameters: parameters)
+        let videos = response.allVideos
         
-        return response.allVideos
+        // Log the first few items raw to see all available keys
+        print("🔍 [SEARCH] Processing \(videos.count) results...")
+        for (index, video) in videos.prefix(3).enumerated() {
+            print("   #\(index): '\(video.displayTitle)' | goto: \(video.goto ?? "nil") | aid: \(video.videoAid != nil ? "\(video.videoAid!)" : "nil") | bvid: \(video.videoBvid ?? "nil")")
+        }
+        
+        return videos
     }
 
     func fetchCategoryVideos(rid: Int) async throws -> [VideoItem] {
