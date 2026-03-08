@@ -11,7 +11,7 @@ import SwiftUI
 struct bilibili_tvosApp: App {
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            MainView()
         }
     }
 }
