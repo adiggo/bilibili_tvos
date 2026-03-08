@@ -24,7 +24,7 @@ struct VideoDetailView: View {
     
     var body: some View {
         HStack(alignment: .top, spacing: 60) {
-            // Left Side: Thumbnail and Play Button
+            // Left Column: Thumbnail and Play Button
             VStack(spacing: 40) {
                 CachedAsyncImage(
                     urlString: video.displayCover,
@@ -64,8 +64,9 @@ struct VideoDetailView: View {
                     .font(.caption)
                     .foregroundColor(.gray)
             }
+            .focusSection() // Group 1
             
-            // Right Side: Meta Data
+            // Right Column: Meta Data and Episodes
             VStack(alignment: .leading, spacing: 20) {
                 Text(video.displayTitle)
                     .font(.largeTitle)
@@ -132,12 +133,13 @@ struct VideoDetailView: View {
                                 .foregroundColor(.red)
                         }
                     }
-                    .padding(.trailing, 40) // Spacing for focus ring
+                    .padding(.trailing, 40)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 
                 Spacer()
             }
+            .focusSection() // Group 2
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(60)
